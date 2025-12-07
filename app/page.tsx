@@ -31,9 +31,13 @@ export default function Home() {
   }, []);
 
   const saveCustomApiKey = (key: string) => {
-    setCustomApiKey(key);
-    localStorage.setItem("custom_gemini_api_key", key);
+    // Aggressive cleanup: remove quotes, spaces, and newlines
+    const cleanKey = key.replace(/["'\s\n]/g, "");
+    setCustomApiKey(cleanKey);
+    localStorage.setItem("custom_gemini_api_key", cleanKey);
   };
+
+  // ... (inside return JSX)
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -258,22 +262,37 @@ export default function Home() {
             <Settings className="w-4 h-4" />
             APIキー設定
           </h3>
-          <p className="text-xs text-gray-500 mb-2">
-            Vercelの設定がうまくいかない場合、ここに直接キーを入力してください（ブラウザに保存されます）。
+          <p className="text-xs text-gray-500 mb-2 leading-relaxed">
+            Vercelの設定がうまくいかない場合、ここに直接キーを入力してください。<br />
+            <span className="text-red-500 font-bold">※「API key not valid」エラーが出る場合、ここに入力し直してください。</span>
           </p>
           <input
             type="text"
             value={customApiKey}
-            onChange={(e) => saveCustomApiKey(e.target.value.trim())}
+            onChange={(e) => saveCustomApiKey(e.target.value)}
             placeholder="AIzaSy..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-1 font-mono tracking-tight"
           />
-          <div className="flex justify-end">
+          {customApiKey && (
+            <p className="text-[10px] text-gray-400 font-mono mb-2 text-right">
+              認識中のキー: {customApiKey.substring(0, 8)}...
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => {
+                saveCustomApiKey("");
+                setShowSettings(false);
+              }}
+              className="text-xs text-red-400 hover:text-red-600 underline"
+            >
+              クリア
+            </button>
             <button
               onClick={() => setShowSettings(false)}
-              className="text-xs text-gray-500 underline"
+              className="text-xs bg-gray-800 text-white px-3 py-1 rounded-md hover:bg-gray-700"
             >
-              閉じる
+              保存して閉じる
             </button>
           </div>
         </div>
