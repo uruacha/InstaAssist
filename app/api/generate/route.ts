@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
     try {
         const apiKey = process.env.GEMINI_API_KEY;
+        console.log("API Key loaded:", !!apiKey);
+        if (apiKey) console.log("Key starts with:", apiKey.substring(0, 10));
 
         if (!apiKey) {
             console.error("GEMINI_API_KEY is missing via process.env");
