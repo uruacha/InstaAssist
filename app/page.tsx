@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Copy, Instagram, Loader2, Sparkles, Upload, Image as ImageIcon, Download, Settings, RefreshCw } from "lucide-react";
+import { Upload, Download, Sparkles, Copy, RefreshCw, Loader2, Image as ImageIcon, Settings, Instagram } from "lucide-react";
 
 export default function Home() {
   const [formData, setFormData] = useState({
@@ -16,9 +16,24 @@ export default function Home() {
   const [isAutoTextMode, setIsAutoTextMode] = useState(false);
   const [generatingText, setGeneratingText] = useState(false);
 
+  // Custom API Key settings
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Load custom API key on mount
+  useEffect(() => {
+    const savedKey = localStorage.getItem("custom_gemini_api_key");
+    if (savedKey) setCustomApiKey(savedKey);
+  }, []);
+
+  const saveCustomApiKey = (key: string) => {
+    setCustomApiKey(key);
+    localStorage.setItem("custom_gemini_api_key", key);
+  };
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -200,9 +215,12 @@ export default function Home() {
     setGeneratingText(true);
     setError("");
     try {
+      const headers: any = { "Content-Type": "application/json" };
+      if (customApiKey) headers["x-gemini-api-key"] = customApiKey;
+
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ ...formData, image, mode: "catchphrase" }),
       });
       const data = await res.json();
@@ -221,12 +239,45 @@ export default function Home() {
 
   return (
     <main className="max-w-md mx-auto min-h-screen bg-gray-50 pb-20">
-      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 py-4 mb-4">
-        <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600 flex items-center gap-2">
-          <Instagram className="w-6 h-6 text-pink-500" />
-          Insta Assistant
+      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 py-4 mb-4 flex justify-between items-center">
+        <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+          InstaAssist AI
         </h1>
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+        >
+          <Settings className="w-5 h-5 text-gray-600" />
+        </button>
       </header>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="mb-6 p-4 bg-white border border-gray-200 rounded-xl shadow-sm animate-in slide-in-from-top-2">
+          <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+            <Settings className="w-4 h-4" />
+            APIキー設定
+          </h3>
+          <p className="text-xs text-gray-500 mb-2">
+            Vercelの設定がうまくいかない場合、ここに直接キーを入力してください（ブラウザに保存されます）。
+          </p>
+          <input
+            type="text"
+            value={customApiKey}
+            onChange={(e) => saveCustomApiKey(e.target.value.trim())}
+            placeholder="AIzaSy..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2"
+          />
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowSettings(false)}
+              className="text-xs text-gray-500 underline"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="px-4 space-y-6">
 
@@ -315,8 +366,8 @@ export default function Home() {
                   <button
                     onClick={() => setIsAutoTextMode(!isAutoTextMode)}
                     className={`text-xs px-3 py-1 rounded-full transition-colors font-bold ${isAutoTextMode
-                        ? "bg-purple-100 text-purple-700"
-                        : "bg-gray-100 text-gray-500"
+                      ? "bg-purple-100 text-purple-700"
+                      : "bg-gray-100 text-gray-500"
                       }`}
                   >
                     {isAutoTextMode ? "✨ AI自動提案モード" : "✍️ 手動入力モード"}

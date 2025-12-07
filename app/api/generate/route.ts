@@ -3,14 +3,22 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
     try {
-        const apiKey = process.env.GEMINI_API_KEY;
-        console.log("API Key loaded:", !!apiKey);
-        if (apiKey) console.log("Key starts with:", apiKey.substring(0, 10));
+        let apiKey = req.headers.get("x-gemini-api-key");
+        const serverKey = process.env.GEMINI_API_KEY;
+
+        // Use header key if present (fallback mode), otherwise server key
+        if (!apiKey) {
+            apiKey = serverKey || null;
+        }
+
+        // Debug logging
+        console.log("Using API Key from:", req.headers.get("x-gemini-api-key") ? "Header" : (serverKey ? "Server" : "None"));
+        if (apiKey) console.log("Key starts with:", apiKey.substring(0, 5) + "...");
 
         if (!apiKey) {
-            console.error("GEMINI_API_KEY is missing via process.env");
+            console.error("GEMINI_API_KEY is missing via process.env AND headers");
             return NextResponse.json(
-                { error: "GEMINI_API_KEY is not set on server" },
+                { error: "API Key is missing. Please set GEMINI_API_KEY on server or provide it in settings." },
                 { status: 500 }
             );
         }
@@ -107,8 +115,15 @@ export async function POST(req: Request) {
         if (error.message) {
             console.error("Error message:", error.message);
         }
+        let errorMessage = error instanceof Error ? error.message : String(error);
+
+        // Provide a clear hint if the key is invalid
+        if (errorMessage.includes("API key not valid") || errorMessage.includes("API Key not found")) {
+            errorMessage += " (The API Key provided is likely incorrect/typoed)";
+        }
+
         return NextResponse.json(
-            { error: "Failed to generate content", details: error instanceof Error ? error.message : String(error) },
+            { error: "Failed to generate content", details: errorMessage },
             { status: 500 }
         );
     }
