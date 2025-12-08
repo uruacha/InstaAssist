@@ -37,6 +37,35 @@ export default function Home() {
     localStorage.setItem("custom_gemini_api_key", cleanKey);
   };
 
+  const [testStatus, setTestStatus] = useState<"none" | "success" | "error">("none");
+  const [testMessage, setTestMessage] = useState("");
+  const [testing, setTesting] = useState(false);
+
+  const testApiKey = async () => {
+    setTesting(true);
+    setTestStatus("none");
+    try {
+      const headers: any = {};
+      if (customApiKey) headers["x-gemini-api-key"] = customApiKey;
+
+      const res = await fetch("/api/models", { headers });
+      const data = await res.json();
+      if (data.models || data.items || Array.isArray(data)) {
+        setTestStatus("success");
+        setTestMessage("接続成功！このキーは有効です✅");
+      } else {
+        console.error("Test Error:", data);
+        setTestStatus("error");
+        setTestMessage(`エラー: ${data.error?.message || JSON.stringify(data.error) || "無効な応答"}`);
+      }
+    } catch (e: any) {
+      setTestStatus("error");
+      setTestMessage(`通信エラー: ${e.message}`);
+    } finally {
+      setTesting(false);
+    }
+  };
+
   // ... (inside return JSX)
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -278,6 +307,23 @@ export default function Home() {
               認識中のキー: {customApiKey.substring(0, 8)}...
             </p>
           )}
+
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={testApiKey}
+              disabled={!customApiKey || testing}
+              className="w-full bg-blue-50 text-blue-600 text-xs py-2 rounded-lg font-bold hover:bg-blue-100 disabled:opacity-50 flex items-center justify-center gap-1"
+            >
+              {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : "📡 接続テストを実行"}
+            </button>
+          </div>
+
+          {testStatus !== "none" && (
+            <div className={`text-xs p-2 rounded mb-4 break-all max-h-24 overflow-y-auto ${testStatus === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+              {testMessage}
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <button
               onClick={() => {
