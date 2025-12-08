@@ -23,6 +23,7 @@ export default function Home() {
   // Text Styling State
   const [textColor, setTextColor] = useState("#ffffff");
   const [textShadow, setTextShadow] = useState("rgba(0,0,0,0.7)");
+  const [textDesign, setTextDesign] = useState("gothic"); // gothic, mincho, pop, impact, neon
   const [verticalPos, setVerticalPos] = useState(50); // 0-100%
   const [fontSizeScale, setFontSizeScale] = useState(1.0); // 0.5 - 2.0
 
@@ -62,10 +63,12 @@ export default function Home() {
 
       setTestStatus("success");
       setTestMessage("接続成功！このキーは有効です✅");
-    } catch (e: any) {
-      console.error("Test Error:", e);
+      setTestMessage("接続成功！このキーは有効です✅");
+    } catch (e: unknown) {
+      const error = e as Error;
+      console.error("Test Error:", error);
       setTestStatus("error");
-      setTestMessage(`エラー: ${e.message || "無効なキーです"}`);
+      setTestMessage(`エラー: ${error.message || "無効なキーです"}`);
     } finally {
       setTesting(false);
     }
@@ -164,31 +167,65 @@ export default function Home() {
           const baseFontSize = img.width * 0.08; // 8% of image width
           const fontSize = baseFontSize * fontSizeScale;
 
-          ctx.font = `bold ${fontSize}px sans-serif`;
+          // Font & Style map
+          let fontFam = "sans-serif";
+          let fontWeight = "bold";
+
+          if (textDesign === "mincho") fontFam = "serif";
+          else if (textDesign === "pop") fontFam = "sans-serif"; // standard sans for now, maybe rounded if avail
+          else if (textDesign === "impact") { fontFam = "Impact, sans-serif"; fontWeight = "900"; }
+
+          ctx.font = `${fontWeight} ${fontSize}px ${fontFam}`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          ctx.fillStyle = textColor;
-          ctx.shadowColor = textShadow;
-          ctx.shadowBlur = 10;
-          ctx.shadowOffsetX = 2;
-          ctx.shadowOffsetY = 2;
-
           const x = img.width / 2;
-          // Calculate Y based on percentage (verticalPos)
-          // Adjust so 0% is top (accounting for text height approximately) and 100% is bottom
           const y = (img.height * verticalPos) / 100;
 
-          // Multi-line support (simple)
           const lines = overlayText.split("\n");
           const lineHeight = fontSize * 1.2;
           const totalTextHeight = (lines.length * lineHeight);
-
-          // Center the text block around the calculated Y
           const startY = y - (totalTextHeight / 2) + (lineHeight / 2);
 
           lines.forEach((line, i) => {
-            ctx.fillText(line, x, startY + (i * lineHeight));
+            const ly = startY + (i * lineHeight);
+
+            if (textDesign === "neon") {
+              // Neon Effect: Multiple shadows
+              ctx.shadowColor = textColor;
+              ctx.shadowBlur = 15;
+              ctx.fillStyle = textColor;
+              ctx.fillText(line, x, ly);
+
+              // Reinforce white core
+              ctx.shadowBlur = 0;
+              ctx.fillStyle = "#ffffff";
+              ctx.fillText(line, x, ly);
+            }
+            else if (textDesign === "pop") {
+              // Pop Effect: Thick white stroke
+              ctx.strokeStyle = "white";
+              ctx.lineWidth = fontSize * 0.15;
+              ctx.lineJoin = "round";
+              ctx.miterLimit = 2;
+              ctx.strokeText(line, x, ly);
+
+              ctx.fillStyle = textColor;
+              ctx.shadowColor = "rgba(0,0,0,0.2)";
+              ctx.shadowBlur = 5;
+              ctx.shadowOffsetX = 3;
+              ctx.shadowOffsetY = 3;
+              ctx.fillText(line, x, ly);
+            }
+            else {
+              // Standard / Mincho / Impact
+              ctx.fillStyle = textColor;
+              ctx.shadowColor = textShadow;
+              ctx.shadowBlur = 10;
+              ctx.shadowOffsetX = 2;
+              ctx.shadowOffsetY = 2;
+              ctx.fillText(line, x, ly);
+            }
           });
         }
 
@@ -296,9 +333,10 @@ export default function Home() {
       const prompt = generatePrompt('caption');
       const text = await callGemini(prompt, image);
       setResult(text);
-    } catch (error: any) {
-      console.error(error);
-      setError(`エラーが発生しました: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error(err);
+      setError(`エラーが発生しました: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -338,8 +376,9 @@ export default function Home() {
       const prompt = generatePrompt('catchphrase');
       const text = await callGemini(prompt, image);
       setOverlayText(text.trim());
-    } catch (e: any) {
-      setError(`エラー: ${e.message}`);
+    } catch (e: unknown) {
+      const error = e as Error;
+      setError(`エラー: ${error.message}`);
     } finally {
       setGeneratingText(false);
     }
@@ -490,8 +529,16 @@ export default function Home() {
                           className="font-bold whitespace-pre-wrap leading-tight"
                           style={{
                             fontSize: `clamp(12px, ${8 * fontSizeScale}vw, ${60 * fontSizeScale}px)`,
-                            color: textColor,
-                            textShadow: `2px 2px 10px ${textShadow}`,
+                            color: textDesign === 'neon' ? '#ffffff' : textColor,
+                            textShadow: textDesign === 'neon'
+                              ? `0 0 5px ${textColor}, 0 0 10px ${textColor}, 0 0 20px ${textColor}`
+                              : textDesign === 'pop'
+                                ? `2px 2px 0px rgba(0,0,0,0.2)`
+                                : `2px 2px 10px ${textShadow}`,
+                            fontFamily: textDesign === 'mincho' ? 'serif' : textDesign === 'impact' ? 'Impact, sans-serif' : 'sans-serif',
+                            fontWeight: textDesign === 'impact' ? '900' : 'bold',
+                            WebkitTextStroke: textDesign === 'pop' ? `0.2em white` : '0',
+                            paintOrder: 'stroke fill',
                           }}
                         >
                           {overlayText}
@@ -563,37 +610,68 @@ export default function Home() {
                   className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow resize-none ${isAutoTextMode ? "border-purple-200 bg-purple-50/30" : "border-gray-300"}`}
                   rows={2}
                 />
+              </div>
 
-                {/* Text Style Controls */}
-                {overlayText && (
-                  <div className="pt-2 space-y-3 p-3 bg-gray-50/50 rounded-xl border border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-gray-500">文字色</span>
-                      <div className="flex gap-2 flex-wrap">
-                        {[
-                          { c: "#ffffff", s: "rgba(0,0,0,0.8)" },  // White
-                          { c: "#000000", s: "rgba(255,255,255,0.8)" }, // Black
-                          { c: "#ff007f", s: "rgba(255,255,255,0.9)" }, // Pink
-                          { c: "#ff4500", s: "rgba(255,255,255,0.9)" }, // Orange
-                          { c: "#ffff00", s: "rgba(0,0,0,0.8)" }, // Yellow
-                          { c: "#32cd32", s: "rgba(0,0,0,0.8)" }, // Lime Green
-                          { c: "#00ffff", s: "rgba(0,0,0,0.8)" }, // Cyan
-                          { c: "#1e90ff", s: "rgba(255,255,255,0.8)" }, // Blue
-                          { c: "#9400d3", s: "rgba(255,255,255,0.9)" }, // Purple
-                        ].map((style) => (
-                          <button
-                            key={style.c}
-                            onClick={() => { setTextColor(style.c); setTextShadow(style.s); }}
-                            className={`w-6 h-6 rounded-full border border-gray-300 shadow-sm transition-transform ${textColor === style.c ? "ring-2 ring-blue-500 scale-110" : "hover:scale-110"}`}
-                            style={{ backgroundColor: style.c }}
-                          />
-                        ))}
-                      </div>
+              {/* Text Style Controls */}
+              {overlayText && (
+                <div className="pt-2 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+
+                  {/* Design Selector */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-500">デザイン</span>
+                    <div className="grid grid-cols-5 gap-1">
+                      {[
+                        { id: "gothic", label: "標準", font: "sans-serif" },
+                        { id: "mincho", label: "明朝", font: "serif" },
+                        { id: "pop", label: "ポップ", font: "sans-serif" },
+                        { id: "impact", label: "強調", font: "Impact" },
+                        { id: "neon", label: "ネオン", font: "sans-serif" },
+                      ].map((d) => (
+                        <button
+                          key={d.id}
+                          onClick={() => setTextDesign(d.id)}
+                          className={`px-1 py-2 rounded-lg text-[10px] font-bold border transition-all ${textDesign === d.id
+                            ? "bg-white border-blue-500 text-blue-600 shadow-sm"
+                            : "bg-transparent border-transparent text-gray-500 hover:bg-gray-100"
+                            }`}
+                          style={{ fontFamily: d.font }}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
                     </div>
+                  </div>
 
+                  {/* Color Selector */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-500">文字色</span>
+                    <div className="flex gap-2 flex-wrap">
+                      {[
+                        { c: "#ffffff", s: "rgba(0,0,0,0.8)" },  // White
+                        { c: "#000000", s: "rgba(255,255,255,0.8)" }, // Black
+                        { c: "#ff007f", s: "rgba(255,255,255,0.9)" }, // Pink
+                        { c: "#ff4500", s: "rgba(255,255,255,0.9)" }, // Orange
+                        { c: "#ffff00", s: "rgba(0,0,0,0.8)" }, // Yellow
+                        { c: "#32cd32", s: "rgba(0,0,0,0.8)" }, // Lime Green
+                        { c: "#00ffff", s: "rgba(0,0,0,0.8)" }, // Cyan
+                        { c: "#1e90ff", s: "rgba(255,255,255,0.8)" }, // Blue
+                        { c: "#9400d3", s: "rgba(255,255,255,0.9)" }, // Purple
+                      ].map((style) => (
+                        <button
+                          key={style.c}
+                          onClick={() => { setTextColor(style.c); setTextShadow(style.s); }}
+                          className={`w-6 h-6 rounded-full border border-gray-300 shadow-sm transition-transform ${textColor === style.c ? "ring-2 ring-blue-500 scale-110" : "hover:scale-110"}`}
+                          style={{ backgroundColor: style.c }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Sliders Row */}
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-gray-500">
-                        <span>位置 (上 ↔ 下)</span>
+                        <span>位置</span>
                         <span>{verticalPos}%</span>
                       </div>
                       <input
@@ -608,7 +686,7 @@ export default function Home() {
 
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-gray-500">
-                        <span>サイズ (小 ↔ 大)</span>
+                        <span>サイズ</span>
                         <span>x{fontSizeScale}</span>
                       </div>
                       <input
@@ -622,28 +700,30 @@ export default function Home() {
                       />
                     </div>
                   </div>
-                )}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleDownloadProcessed}
+                  className="flex-1 py-3 bg-gray-800 text-white rounded-xl font-bold hover:bg-gray-900 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <Download className="w-5 h-5" />
+                  保存
+                </button>
+
+                <button
+                  onClick={() => { setImage(null); setOverlayText(""); }}
+                  className="px-4 py-3 text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors flex items-center justify-center"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                </button>
               </div>
-
-              <button
-                onClick={handleDownloadProcessed}
-                className="w-full py-3 bg-gray-800 text-white rounded-xl font-bold hover:bg-gray-900 transition-colors flex items-center justify-center gap-2 shadow-sm"
-              >
-                <Download className="w-5 h-5" />
-                画像を保存
-              </button>
-
-              <button
-                onClick={() => { setImage(null); setOverlayText(""); }}
-                className="w-full py-2 text-red-500 font-medium hover:bg-red-50 rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                リセット
-              </button>
             </div>
           )}
         </section>
 
+        {/* Text Input Section */}
         {/* Text Input Section */}
         <section className="bg-white rounded-2xl shadow-sm p-5 space-y-5 border border-gray-100">
           <h2 className="font-bold text-gray-800 flex items-center gap-2 text-lg">
@@ -703,7 +783,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </section>
+        </section >
 
         <button
           onClick={handleSubmit}
@@ -724,29 +804,31 @@ export default function Home() {
         </button>
 
         {/* Result Section */}
-        {result && (
-          <section className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="font-bold text-gray-800 ml-1 text-lg">生成結果</h2>
-            <div className="bg-white rounded-2xl shadow-sm p-1 border border-gray-200 relative">
-              <textarea
-                value={result}
-                onChange={(e) => setResult(e.target.value)}
-                className="w-full h-80 p-5 rounded-xl border-none resize-none focus:ring-0 text-base leading-relaxed text-gray-900 bg-transparent"
-              />
-            </div>
+        {
+          result && (
+            <section className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <h2 className="font-bold text-gray-800 ml-1 text-lg">生成結果</h2>
+              <div className="bg-white rounded-2xl shadow-sm p-1 border border-gray-200 relative">
+                <textarea
+                  value={result}
+                  onChange={(e) => setResult(e.target.value)}
+                  className="w-full h-80 p-5 rounded-xl border-none resize-none focus:ring-0 text-base leading-relaxed text-gray-900 bg-transparent"
+                />
+              </div>
 
-            <button
-              onClick={handleCopyAndOpen}
-              className="w-full bg-white border-2 border-gray-200 text-gray-800 font-bold py-4 rounded-xl shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-base"
-            >
-              <Copy className="w-5 h-5 text-gray-600" />
-              <span>コピーして</span>
-              <Instagram className="w-5 h-5 text-pink-600" />
-              <span>を開く</span>
-            </button>
-          </section>
-        )}
-      </div>
-    </main>
+              <button
+                onClick={handleCopyAndOpen}
+                className="w-full bg-white border-2 border-gray-200 text-gray-800 font-bold py-4 rounded-xl shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-base"
+              >
+                <Copy className="w-5 h-5 text-gray-600" />
+                <span>コピーして</span>
+                <Instagram className="w-5 h-5 text-pink-600" />
+                <span>を開く</span>
+              </button>
+            </section>
+          )
+        }
+      </div >
+    </main >
   );
 }
