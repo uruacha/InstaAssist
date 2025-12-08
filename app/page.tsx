@@ -20,6 +20,12 @@ export default function Home() {
   const [customApiKey, setCustomApiKey] = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
+  // Text Styling State
+  const [textColor, setTextColor] = useState("#ffffff");
+  const [textShadow, setTextShadow] = useState("rgba(0,0,0,0.7)");
+  const [verticalPos, setVerticalPos] = useState(50); // 0-100%
+  const [fontSizeScale, setFontSizeScale] = useState(1.0); // 0.5 - 2.0
+
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -156,23 +162,31 @@ export default function Home() {
 
         // Draw Text Overlay
         if (overlayText) {
-          const fontSize = img.width * 0.08; // 8% of image width
+          const baseFontSize = img.width * 0.08; // 8% of image width
+          const fontSize = baseFontSize * fontSizeScale;
+
           ctx.font = `bold ${fontSize}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillStyle = "white";
-          ctx.shadowColor = "rgba(0,0,0,0.7)";
+
+          ctx.fillStyle = textColor;
+          ctx.shadowColor = textShadow;
           ctx.shadowBlur = 10;
           ctx.shadowOffsetX = 2;
           ctx.shadowOffsetY = 2;
 
           const x = img.width / 2;
-          const y = img.height / 2;
+          // Calculate Y based on percentage (verticalPos)
+          // Adjust so 0% is top (accounting for text height approximately) and 100% is bottom
+          const y = (img.height * verticalPos) / 100;
 
           // Multi-line support (simple)
           const lines = overlayText.split("\n");
           const lineHeight = fontSize * 1.2;
-          const startY = y - ((lines.length - 1) * lineHeight) / 2;
+          const totalTextHeight = (lines.length * lineHeight);
+
+          // Center the text block around the calculated Y
+          const startY = y - (totalTextHeight / 2) + (lineHeight / 2);
 
           lines.forEach((line, i) => {
             ctx.fillText(line, x, startY + (i * lineHeight));
@@ -393,16 +407,38 @@ export default function Home() {
                   />
                   {/* Text Overlay Preview (CSS) */}
                   {overlayText && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <p
-                        className="text-white font-bold text-center whitespace-pre-wrap leading-tight"
+                    <div
+                      className="absolute inset-0 flex flex-col items-center pointer-events-none w-full"
+                      style={{
+                        justifyContent: verticalPos < 20 ? 'flex-start' : verticalPos > 80 ? 'flex-end' : 'center',
+                        top: verticalPos < 20 ? `${verticalPos}%` : 'auto',
+                        bottom: verticalPos > 80 ? `${100 - verticalPos}%` : 'auto',
+                        // For center (20-80%), we use top with calculation relative to height, 
+                        // but CSS absolute positioning is tricky for exact "center of text at Y%".
+                        // Let's use `top: Y%` and `transform: translateY(-50%)` for generic positioning.
+                      }}
+                    >
+                      <div
                         style={{
-                          fontSize: 'clamp(20px, 8vw, 60px)',
-                          textShadow: '2px 2px 10px rgba(0,0,0,0.7)'
+                          position: 'absolute',
+                          top: `${verticalPos}%`,
+                          transform: 'translateY(-50%)',
+                          width: '100%',
+                          textAlign: 'center'
                         }}
                       >
-                        {overlayText}
-                      </p>
+                        <p
+                          className="font-bold whitespace-pre-wrap leading-tight"
+                          style={{
+                            fontSize: `clamp(12px, ${8 * fontSizeScale}vw, ${60 * fontSizeScale}px)`,
+                            color: textColor,
+                            textShadow: `2px 2px 10px ${textShadow}`,
+                            // Approximate relative sizing for preview match
+                          }}
+                        >
+                          {overlayText}
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -469,6 +505,62 @@ export default function Home() {
                   className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow resize-none ${isAutoTextMode ? "border-purple-200 bg-purple-50/30" : "border-gray-300"}`}
                   rows={2}
                 />
+
+                {/* Text Style Controls */}
+                {overlayText && (
+                  <div className="pt-2 space-y-3 p-3 bg-gray-50/50 rounded-xl border border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-500">文字色</span>
+                      <div className="flex gap-2">
+                        {[
+                          { c: "#ffffff", s: "rgba(0,0,0,0.8)" },  // White (+Black Shadow)
+                          { c: "#000000", s: "rgba(255,255,255,0.8)" }, // Black (+White Shadow)
+                          { c: "#ff007f", s: "rgba(255,255,255,0.9)" }, // Pink
+                          { c: "#ffff00", s: "rgba(0,0,0,0.8)" }, // Yellow
+                          { c: "#00ffff", s: "rgba(0,0,0,0.8)" }, // Cyan
+                        ].map((style) => (
+                          <button
+                            key={style.c}
+                            onClick={() => { setTextColor(style.c); setTextShadow(style.s); }}
+                            className={`w-6 h-6 rounded-full border border-gray-300 shadow-sm transition-transform ${textColor === style.c ? "ring-2 ring-blue-500 scale-110" : "hover:scale-110"}`}
+                            style={{ backgroundColor: style.c }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>位置 (上 ↔ 下)</span>
+                        <span>{verticalPos}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="90"
+                        value={verticalPos}
+                        onChange={(e) => setVerticalPos(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>サイズ (小 ↔ 大)</span>
+                        <span>x{fontSizeScale}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.1"
+                        value={fontSizeScale}
+                        onChange={(e) => setFontSizeScale(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
