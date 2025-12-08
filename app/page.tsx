@@ -197,9 +197,12 @@ export default function Home() {
 
     setLoading(true);
     try {
+      const headers: any = { "Content-Type": "application/json" };
+      if (customApiKey) headers["x-gemini-api-key"] = customApiKey;
+
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         // Send image (original base64) to API. API processes it for context.
         body: JSON.stringify({ ...formData, image }),
       });
