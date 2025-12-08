@@ -55,7 +55,7 @@ export default function Home() {
       if (!customApiKey) throw new Error("APIキーが入力されていません");
 
       const genAI = new GoogleGenerativeAI(customApiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Use 1.5-flash for test
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Match generation model
 
       // Minimal generation test
       await model.generateContent("Test");
@@ -474,21 +474,14 @@ export default function Home() {
                   {/* Text Overlay Preview (CSS) */}
                   {overlayText && (
                     <div
-                      className="absolute inset-0 flex flex-col items-center pointer-events-none w-full"
-                      style={{
-                        justifyContent: verticalPos < 20 ? 'flex-start' : verticalPos > 80 ? 'flex-end' : 'center',
-                        top: verticalPos < 20 ? `${verticalPos}%` : 'auto',
-                        bottom: verticalPos > 80 ? `${100 - verticalPos}%` : 'auto',
-                        // For center (20-80%), we use top with calculation relative to height, 
-                        // but CSS absolute positioning is tricky for exact "center of text at Y%".
-                        // Let's use `top: Y%` and `transform: translateY(-50%)` for generic positioning.
-                      }}
+                      className="absolute inset-0 pointer-events-none w-full h-full overflow-hidden"
                     >
                       <div
                         style={{
                           position: 'absolute',
                           top: `${verticalPos}%`,
-                          transform: 'translateY(-50%)',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
                           width: '100%',
                           textAlign: 'center'
                         }}
@@ -499,7 +492,6 @@ export default function Home() {
                             fontSize: `clamp(12px, ${8 * fontSizeScale}vw, ${60 * fontSizeScale}px)`,
                             color: textColor,
                             textShadow: `2px 2px 10px ${textShadow}`,
-                            // Approximate relative sizing for preview match
                           }}
                         >
                           {overlayText}
@@ -577,13 +569,17 @@ export default function Home() {
                   <div className="pt-2 space-y-3 p-3 bg-gray-50/50 rounded-xl border border-gray-100">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-gray-500">文字色</span>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         {[
-                          { c: "#ffffff", s: "rgba(0,0,0,0.8)" },  // White (+Black Shadow)
-                          { c: "#000000", s: "rgba(255,255,255,0.8)" }, // Black (+White Shadow)
+                          { c: "#ffffff", s: "rgba(0,0,0,0.8)" },  // White
+                          { c: "#000000", s: "rgba(255,255,255,0.8)" }, // Black
                           { c: "#ff007f", s: "rgba(255,255,255,0.9)" }, // Pink
+                          { c: "#ff4500", s: "rgba(255,255,255,0.9)" }, // Orange
                           { c: "#ffff00", s: "rgba(0,0,0,0.8)" }, // Yellow
+                          { c: "#32cd32", s: "rgba(0,0,0,0.8)" }, // Lime Green
                           { c: "#00ffff", s: "rgba(0,0,0,0.8)" }, // Cyan
+                          { c: "#1e90ff", s: "rgba(255,255,255,0.8)" }, // Blue
+                          { c: "#9400d3", s: "rgba(255,255,255,0.9)" }, // Purple
                         ].map((style) => (
                           <button
                             key={style.c}
