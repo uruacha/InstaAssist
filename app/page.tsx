@@ -1,7 +1,7 @@
 "use client";
-
 import { useState, useEffect, useRef } from "react";
-import { Upload, Download, Sparkles, Copy, RefreshCw, Loader2, Image as ImageIcon, Settings, Instagram } from "lucide-react";
+import { Upload, Download, Sparkles, Copy, RefreshCw, Loader2, Image as ImageIcon, Settings, Instagram, Eye, EyeOff } from "lucide-react";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default function Home() {
   const [formData, setFormData] = useState({
@@ -46,27 +46,26 @@ export default function Home() {
   const [testStatus, setTestStatus] = useState<"none" | "success" | "error">("none");
   const [testMessage, setTestMessage] = useState("");
   const [testing, setTesting] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false); // Toggle visibility
 
   const testApiKey = async () => {
     setTesting(true);
     setTestStatus("none");
     try {
-      const headers: any = {};
-      if (customApiKey) headers["x-gemini-api-key"] = customApiKey;
+      if (!customApiKey) throw new Error("APIキーが入力されていません");
 
-      const res = await fetch("/api/models", { headers });
-      const data = await res.json();
-      if (data.models || data.items || Array.isArray(data)) {
-        setTestStatus("success");
-        setTestMessage("接続成功！このキーは有効です✅");
-      } else {
-        console.error("Test Error:", data);
-        setTestStatus("error");
-        setTestMessage(`エラー: ${data.error?.message || JSON.stringify(data.error) || "無効な応答"}`);
-      }
+      const genAI = new GoogleGenerativeAI(customApiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Use 1.5-flash for test
+
+      // Minimal generation test
+      await model.generateContent("Test");
+
+      setTestStatus("success");
+      setTestMessage("接続成功！このキーは有効です✅");
     } catch (e: any) {
+      console.error("Test Error:", e);
       setTestStatus("error");
-      setTestMessage(`通信エラー: ${e.message}`);
+      setTestMessage(`エラー: ${e.message || "無効なキーです"}`);
     } finally {
       setTesting(false);
     }
@@ -202,6 +201,89 @@ export default function Home() {
     };
   };
 
+  // Helper to generate prompt
+  const generatePrompt = (mode: 'caption' | 'catchphrase') => {
+    const { theme, target, goal, atmosphere } = formData;
+    if (mode === 'catchphrase') {
+      return `
+        あなたはプロのInstagramマーケターです。
+        以下の情報を元に、Instagramの画像に重ねるための「短くてインパクトのあるキャッチコピー」を1つだけ生成してください。
+
+        【入力情報】
+        投稿テーマ: ${theme}
+        ターゲット: ${target}
+        雰囲気: ${atmosphere}
+
+        【添付画像について】
+        ${image ? "添付画像の要素（色、被写体、雰囲気）を強く意識したフレーズにしてください。" : "テーマに沿ったフレーズにしてください。"}
+
+        【指示】
+        1. 15文字以内で出力してください。
+        2. 改行はしないでください。
+        3. 絵文字は使わないでください（文字のみ）。
+        4. 出力は生成されたキャッチコピーのみを返してください（「キャッチコピー：」などの前置きは不要）。
+        `;
+    } else {
+      let systemPrompt = `
+        あなたはプロのInstagramマーケターです。
+        以下の情報を元に、Instagramの投稿用キャプションとハッシュタグを生成してください。
+
+        【入力情報】
+        投稿テーマ: ${theme}
+        ターゲット: ${target}
+        目的: ${goal}
+        雰囲気: ${atmosphere}
+        `;
+
+      if (image) {
+        systemPrompt += `
+        【添付画像について】
+        ユーザーが投稿に使用したい画像を添付しました。
+        画像の内容を分析し、その内容（写っているもの、色、雰囲気など）に触れるようなキャプションにしてください。
+        `;
+      }
+
+      systemPrompt += `
+        【指示】
+        1. ターゲットに刺さる言葉選びを意識してください。
+        2. 目的に沿った構成にしてください。
+        3. 雰囲気（${atmosphere}）に合わせたトーン＆マナーで書いてください。
+        4. 絵文字を適度に使用して、読みやすく魅力的な文章にしてください。
+        5. 最適なハッシュタグを10〜15個程度提案してください。
+        6. 出力フォーマットは以下の通りにしてください。
+
+        [キャプション]
+        (ここにキャプション本文)
+
+        [ハッシュタグ]
+        (ここにハッシュタグ)
+        `;
+      return systemPrompt;
+    }
+  };
+
+  const callGemini = async (prompt: string, imageBase64: string | null) => {
+    if (!customApiKey) throw new Error("APIキーが設定されていません。右上の設定ボタンからキーを入力してください。");
+
+    const genAI = new GoogleGenerativeAI(customApiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Use 2.5 flash
+
+    if (imageBase64) {
+      const imagePart = {
+        inlineData: {
+          data: imageBase64.split(",")[1],
+          mimeType: "image/jpeg",
+        },
+      };
+      const result = await model.generateContent([prompt, imagePart]);
+      return result.response.text();
+    } else {
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    }
+  };
+
+
   const handleSubmit = async () => {
     setError(""); // Clear previous errors
     if (!formData.theme && !image) {
@@ -211,22 +293,9 @@ export default function Home() {
 
     setLoading(true);
     try {
-      const headers: any = { "Content-Type": "application/json" };
-      if (customApiKey) headers["x-gemini-api-key"] = customApiKey;
-
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers,
-        // Send image (original base64) to API. API processes it for context.
-        body: JSON.stringify({ ...formData, image }),
-      });
-      const data = await res.json();
-      if (data.result) {
-        setResult(data.result);
-      } else {
-        console.error("API Error:", data); // Log full object for developer
-        setError(`生成に失敗しました。\n詳細: ${data.details || data.error || "Unknown error"}`);
-      }
+      const prompt = generatePrompt('caption');
+      const text = await callGemini(prompt, image);
+      setResult(text);
     } catch (error: any) {
       console.error(error);
       setError(`エラーが発生しました: ${error.message}`);
@@ -236,6 +305,7 @@ export default function Home() {
   };
 
   const handleCopyAndOpen = async () => {
+    // ... (unchanged)
     if (!result) return;
     try {
       await navigator.clipboard.writeText(result);
@@ -265,21 +335,9 @@ export default function Home() {
     setGeneratingText(true);
     setError("");
     try {
-      const headers: any = { "Content-Type": "application/json" };
-      if (customApiKey) headers["x-gemini-api-key"] = customApiKey;
-
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ ...formData, image, mode: "catchphrase" }),
-      });
-      const data = await res.json();
-      if (data.result) {
-        setOverlayText(data.result);
-      } else {
-        console.error("Catchphrase Error:", data);
-        setError(`キャッチコピー生成失敗: ${data.details || data.error}`);
-      }
+      const prompt = generatePrompt('catchphrase');
+      const text = await callGemini(prompt, image);
+      setOverlayText(text.trim());
     } catch (e: any) {
       setError(`エラー: ${e.message}`);
     } finally {
@@ -312,18 +370,26 @@ export default function Home() {
             Vercelの設定がうまくいかない場合、ここに直接キーを入力してください。<br />
             <span className="text-red-500 font-bold">※「API key not valid」エラーが出る場合、ここに入力し直してください。</span>
           </p>
-          <input
-            type="text"
-            value={customApiKey}
-            onChange={(e) => saveCustomApiKey(e.target.value)}
-            placeholder="AIzaSy..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-1 font-mono tracking-tight"
-          />
-          {customApiKey && (
-            <p className="text-[10px] text-gray-400 font-mono mb-2 text-right">
-              認識中のキー: {customApiKey.substring(0, 8)}...
-            </p>
-          )}
+          <div className="relative mb-4">
+            <input
+              type={showApiKey ? "text" : "password"}
+              value={customApiKey}
+              onChange={(e) => saveCustomApiKey(e.target.value)}
+              placeholder="AIzaSy..."
+              className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg text-sm font-mono tracking-tight"
+            />
+            <button
+              onClick={() => setShowApiKey(!showApiKey)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+            {customApiKey && (
+              <p className="text-[10px] text-gray-400 font-mono mt-1 text-right">
+                認識中のキー: {showApiKey ? customApiKey : "●●●●●●●●"}
+              </p>
+            )}
+          </div>
 
           <div className="flex gap-2 mb-4">
             <button
