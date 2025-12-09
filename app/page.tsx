@@ -15,21 +15,29 @@ export default function Home() {
   const [overlayText, setOverlayText] = useState("");
   const [isAutoTextMode, setIsAutoTextMode] = useState(false);
   const [generatingText, setGeneratingText] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // Custom API Key settings
   const [customApiKey, setCustomApiKey] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testStatus, setTestStatus] = useState<"none" | "success" | "error">("none");
+  const [testMessage, setTestMessage] = useState("");
+  const [testing, setTesting] = useState(false);
 
   // Text Styling State
   const [textColor, setTextColor] = useState("#ffffff");
   const [textShadow, setTextShadow] = useState("rgba(0,0,0,0.7)");
+
   const [textDesign, setTextDesign] = useState("gothic"); // gothic, mincho, pop, impact, neon
   const [verticalPos, setVerticalPos] = useState(50); // 0-100%
+  const [horizontalPos, setHorizontalPos] = useState(50); // 0-100%
   const [fontSizeScale, setFontSizeScale] = useState(1.0); // 0.5 - 2.0
 
   const [result, setResult] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Load custom API key on mount
   useEffect(() => {
@@ -44,11 +52,6 @@ export default function Home() {
     localStorage.setItem("custom_gemini_api_key", cleanKey);
   };
 
-  const [testStatus, setTestStatus] = useState<"none" | "success" | "error">("none");
-  const [testMessage, setTestMessage] = useState("");
-  const [testing, setTesting] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false); // Toggle visibility
-
   const testApiKey = async () => {
     setTesting(true);
     setTestStatus("none");
@@ -56,13 +59,12 @@ export default function Home() {
       if (!customApiKey) throw new Error("APIキーが入力されていません");
 
       const genAI = new GoogleGenerativeAI(customApiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Match generation model
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
       // Minimal generation test
       await model.generateContent("Test");
 
       setTestStatus("success");
-      setTestMessage("接続成功！このキーは有効です✅");
       setTestMessage("接続成功！このキーは有効です✅");
     } catch (e: unknown) {
       const error = e as Error;
@@ -73,10 +75,6 @@ export default function Home() {
       setTesting(false);
     }
   };
-
-  // ... (inside return JSX)
-
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Persistence
   useEffect(() => {
@@ -101,7 +99,7 @@ export default function Home() {
   const filters = [
     { name: "なし", value: "none", class: "" },
     { name: "明るく", value: "brightness(1.2)", class: "brightness-125" },
-    { name: "暖かく", value: "sepia(0.3)", class: "sepia-30" }, // standard Tailwind doesn't have sepia-30, we'll use style
+    { name: "暖かく", value: "sepia(0.3)", class: "sepia-30" },
     { name: "モノクロ", value: "grayscale(1)", class: "grayscale" },
   ];
 
@@ -172,14 +170,14 @@ export default function Home() {
           let fontWeight = "bold";
 
           if (textDesign === "mincho") fontFam = "serif";
-          else if (textDesign === "pop") fontFam = "sans-serif"; // standard sans for now, maybe rounded if avail
+          else if (textDesign === "pop") fontFam = "sans-serif";
           else if (textDesign === "impact") { fontFam = "Impact, sans-serif"; fontWeight = "900"; }
 
           ctx.font = `${fontWeight} ${fontSize}px ${fontFam}`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          const x = img.width / 2;
+          const x = (img.width * horizontalPos) / 100;
           const y = (img.height * verticalPos) / 100;
 
           const lines = overlayText.split("\n");
@@ -238,39 +236,38 @@ export default function Home() {
     };
   };
 
-  // Helper to generate prompt
   const generatePrompt = (mode: 'caption' | 'catchphrase') => {
     const { theme, target, goal, atmosphere } = formData;
     if (mode === 'catchphrase') {
       return `
-        あなたはプロのInstagramマーケターです。
-        以下の情報を元に、Instagramの画像に重ねるための「短くてインパクトのあるキャッチコピー」を1つだけ生成してください。
+            あなたはプロのInstagramマーケターです。
+            以下の情報を元に、Instagramの画像に重ねるための「短くてインパクトのあるキャッチコピー」を1つだけ生成してください。
 
-        【入力情報】
-        投稿テーマ: ${theme}
-        ターゲット: ${target}
-        雰囲気: ${atmosphere}
+            【入力情報】
+            投稿テーマ: ${theme}
+            ターゲット: ${target}
+            雰囲気: ${atmosphere}
 
-        【添付画像について】
-        ${image ? "添付画像の要素（色、被写体、雰囲気）を強く意識したフレーズにしてください。" : "テーマに沿ったフレーズにしてください。"}
+            【添付画像について】
+            ${image ? "添付画像の要素（色、被写体、雰囲気）を強く意識したフレーズにしてください。" : "テーマに沿ったフレーズにしてください。"}
 
-        【指示】
-        1. 15文字以内で出力してください。
-        2. 改行はしないでください。
-        3. 絵文字は使わないでください（文字のみ）。
-        4. 出力は生成されたキャッチコピーのみを返してください（「キャッチコピー：」などの前置きは不要）。
-        `;
+            【指示】
+            1. 15文字以内で出力してください。
+            2. 改行はしないでください。
+            3. 絵文字は使わないでください（文字のみ）。
+            4. 出力は生成されたキャッチコピーのみを返してください（「キャッチコピー：」などの前置きは不要）。
+            `;
     } else {
       let systemPrompt = `
-        あなたはプロのInstagramマーケターです。
-        以下の情報を元に、Instagramの投稿用キャプションとハッシュタグを生成してください。
+            あなたはプロのInstagramマーケターです。
+            以下の情報を元に、Instagramの投稿用キャプションとハッシュタグを生成してください。
 
-        【入力情報】
-        投稿テーマ: ${theme}
-        ターゲット: ${target}
-        目的: ${goal}
-        雰囲気: ${atmosphere}
-        `;
+            【入力情報】
+            投稿テーマ: ${theme}
+            ターゲット: ${target}
+            目的: ${goal}
+            雰囲気: ${atmosphere}
+            `;
 
       if (image) {
         systemPrompt += `
@@ -281,20 +278,20 @@ export default function Home() {
       }
 
       systemPrompt += `
-        【指示】
-        1. ターゲットに刺さる言葉選びを意識してください。
-        2. 目的に沿った構成にしてください。
-        3. 雰囲気（${atmosphere}）に合わせたトーン＆マナーで書いてください。
-        4. 絵文字を適度に使用して、読みやすく魅力的な文章にしてください。
-        5. 最適なハッシュタグを10〜15個程度提案してください。
-        6. 出力フォーマットは以下の通りにしてください。
+            【指示】
+            1. ターゲットに刺さる言葉選びを意識してください。
+            2. 目的に沿った構成にしてください。
+            3. 雰囲気（${atmosphere}）に合わせたトーン＆マナーで書いてください。
+            4. 絵文字を適度に使用して、読みやすく魅力的な文章にしてください。
+            5. 最適なハッシュタグを10〜15個程度提案してください。
+            6. 出力フォーマットは以下の通りにしてください。
 
-        [キャプション]
-        (ここにキャプション本文)
+            [キャプション]
+            (ここにキャプション本文)
 
-        [ハッシュタグ]
-        (ここにハッシュタグ)
-        `;
+            [ハッシュタグ]
+            (ここにハッシュタグ)
+            `;
       return systemPrompt;
     }
   };
@@ -303,7 +300,7 @@ export default function Home() {
     if (!customApiKey) throw new Error("APIキーが設定されていません。右上の設定ボタンからキーを入力してください。");
 
     const genAI = new GoogleGenerativeAI(customApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Use 2.5 flash
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     if (imageBase64) {
       const imagePart = {
@@ -320,9 +317,8 @@ export default function Home() {
     }
   };
 
-
   const handleSubmit = async () => {
-    setError(""); // Clear previous errors
+    setError("");
     if (!formData.theme && !image) {
       setError("投稿テーマを入力するか、画像をアップロードしてください");
       return;
@@ -342,8 +338,26 @@ export default function Home() {
     }
   };
 
+  const handleGenerateCatchphrase = async () => {
+    if (!formData.theme && !image) {
+      setError("AI生成には投稿テーマまたは画像が必要です");
+      return;
+    }
+    setGeneratingText(true);
+    setError("");
+    try {
+      const prompt = generatePrompt('catchphrase');
+      const text = await callGemini(prompt, image);
+      setOverlayText(text.trim());
+    } catch (e: unknown) {
+      const error = e as Error;
+      setError(`エラー: ${error.message}`);
+    } finally {
+      setGeneratingText(false);
+    }
+  };
+
   const handleCopyAndOpen = async () => {
-    // ... (unchanged)
     if (!result) return;
     try {
       await navigator.clipboard.writeText(result);
@@ -362,25 +376,6 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to copy:", err);
       alert("コピーに失敗しました");
-    }
-  };
-
-  const handleGenerateCatchphrase = async () => {
-    if (!formData.theme && !image) {
-      setError("AI生成には投稿テーマまたは画像が必要です");
-      return;
-    }
-    setGeneratingText(true);
-    setError("");
-    try {
-      const prompt = generatePrompt('catchphrase');
-      const text = await callGemini(prompt, image);
-      setOverlayText(text.trim());
-    } catch (e: unknown) {
-      const error = e as Error;
-      setError(`エラー: ${error.message}`);
-    } finally {
-      setGeneratingText(false);
     }
   };
 
@@ -481,11 +476,72 @@ export default function Home() {
           </div>
         )}
 
-        {/* Image Section */}
+        {/* Post Settings Section (Moved to Top) */}
+        <section className="bg-white rounded-2xl shadow-sm p-5 space-y-5 border border-gray-100">
+          <h2 className="font-bold text-gray-800 flex items-center gap-2 text-lg">
+            <Settings className="w-5 h-5 text-purple-500" />
+            投稿設定
+          </h2>
+
+          <div className="space-y-5">
+            <div>
+              <label className="block text-base font-bold text-gray-800 mb-2">投稿テーマ</label>
+              <input
+                type="text"
+                placeholder="例：週末のカフェ巡り"
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-base placeholder-gray-400 font-medium"
+                value={formData.theme}
+                onChange={(e) => setFormData({ ...formData, theme: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-base font-bold text-gray-800 mb-2">ターゲット</label>
+              <input
+                type="text"
+                placeholder="例：20代の社会人"
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-base placeholder-gray-400 font-medium"
+                value={formData.target}
+                onChange={(e) => setFormData({ ...formData, target: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-base font-bold text-gray-800 mb-2">目的</label>
+              <input
+                type="text"
+                placeholder="例：いいねが欲しい"
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-base placeholder-gray-400 font-medium"
+                value={formData.goal}
+                onChange={(e) => setFormData({ ...formData, goal: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-base font-bold text-gray-800 mb-3">雰囲気</label>
+              <div className="flex flex-wrap gap-2">
+                {atmospheres.map((atm) => (
+                  <button
+                    key={atm}
+                    onClick={() => setFormData({ ...formData, atmosphere: atm })}
+                    className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${formData.atmosphere === atm
+                      ? "bg-purple-600 text-white shadow-md transform scale-105"
+                      : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
+                      }`}
+                  >
+                    {atm}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section >
+
+        {/* Image Section (Cleaned up and Text Controls moved here) */}
         <section className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-4">
           <h2 className="font-bold text-gray-800 flex items-center gap-2 text-lg">
             <ImageIcon className="w-5 h-5 text-blue-500" />
-            画像 (任意)
+            画像加工
           </h2>
 
           {!image ? (
@@ -519,7 +575,7 @@ export default function Home() {
                         style={{
                           position: 'absolute',
                           top: `${verticalPos}%`,
-                          left: '50%',
+                          left: `${horizontalPos}%`,
                           transform: 'translate(-50%, -50%)',
                           width: '100%',
                           textAlign: 'center'
@@ -549,7 +605,118 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Filter Controls */}
+              {/* MOVED: Text Style Controls (Sliders, Colors, etc.) */}
+              {overlayText && (
+                <div className="pt-2 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100 animate-in slide-in-from-top-2">
+
+                  {/* Design Selector */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-500">デザイン</span>
+                    <div className="grid grid-cols-5 gap-1">
+                      {[
+                        { id: "gothic", label: "標準", font: "sans-serif" },
+                        { id: "mincho", label: "明朝", font: "serif" },
+                        { id: "pop", label: "ポップ", font: "sans-serif" },
+                        { id: "impact", label: "強調", font: "Impact" },
+                        { id: "neon", label: "ネオン", font: "sans-serif" },
+                      ].map((d) => (
+                        <button
+                          key={d.id}
+                          onClick={() => setTextDesign(d.id)}
+                          className={`px-1 py-2 rounded-lg text-[10px] font-bold border transition-all ${textDesign === d.id
+                            ? "bg-white border-blue-500 text-blue-600 shadow-sm"
+                            : "bg-transparent border-transparent text-gray-500 hover:bg-gray-100"
+                            }`}
+                          style={{ fontFamily: d.font }}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Color Selector */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-500">文字色</span>
+                    <div className="flex gap-2 flex-wrap">
+                      {[
+                        { c: "#ffffff", s: "rgba(0,0,0,0.8)" },  // White
+                        { c: "#000000", s: "rgba(255,255,255,0.8)" }, // Black
+                        { c: "#ff007f", s: "rgba(255,255,255,0.9)" }, // Pink
+                        { c: "#ff4500", s: "rgba(255,255,255,0.9)" }, // Orange
+                        { c: "#ffff00", s: "rgba(0,0,0,0.8)" }, // Yellow
+                        { c: "#32cd32", s: "rgba(0,0,0,0.8)" }, // Lime Green
+                        { c: "#00ffff", s: "rgba(0,0,0,0.8)" }, // Cyan
+                        { c: "#1e90ff", s: "rgba(255,255,255,0.8)" }, // Blue
+                        { c: "#9400d3", s: "rgba(255,255,255,0.9)" }, // Purple
+                      ].map((style) => (
+                        <button
+                          key={style.c}
+                          onClick={() => { setTextColor(style.c); setTextShadow(style.s); }}
+                          className={`w-6 h-6 rounded-full border border-gray-300 shadow-sm transition-transform ${textColor === style.c ? "ring-2 ring-blue-500 scale-110" : "hover:scale-110"}`}
+                          style={{ backgroundColor: style.c }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Sliders Row (Vertical, Horizontal, Size) */}
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Vertical Pos */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>縦位置</span>
+                          <span>{verticalPos}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="10"
+                          max="90"
+                          value={verticalPos}
+                          onChange={(e) => setVerticalPos(Number(e.target.value))}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                      </div>
+
+                      {/* Horizontal Pos */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>横位置</span>
+                          <span>{horizontalPos}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="10"
+                          max="90"
+                          value={horizontalPos}
+                          onChange={(e) => setHorizontalPos(Number(e.target.value))}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Font Size */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>サイズ</span>
+                        <span>x{fontSizeScale}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.1"
+                        value={fontSizeScale}
+                        onChange={(e) => setFontSizeScale(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Filter Controls (Moved below Style Controls) */}
               <div className="space-y-2">
                 <p className="text-sm font-bold text-gray-700">雰囲気加工フィルター</p>
                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -612,97 +779,7 @@ export default function Home() {
                 />
               </div>
 
-              {/* Text Style Controls */}
-              {overlayText && (
-                <div className="pt-2 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-
-                  {/* Design Selector */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-gray-500">デザイン</span>
-                    <div className="grid grid-cols-5 gap-1">
-                      {[
-                        { id: "gothic", label: "標準", font: "sans-serif" },
-                        { id: "mincho", label: "明朝", font: "serif" },
-                        { id: "pop", label: "ポップ", font: "sans-serif" },
-                        { id: "impact", label: "強調", font: "Impact" },
-                        { id: "neon", label: "ネオン", font: "sans-serif" },
-                      ].map((d) => (
-                        <button
-                          key={d.id}
-                          onClick={() => setTextDesign(d.id)}
-                          className={`px-1 py-2 rounded-lg text-[10px] font-bold border transition-all ${textDesign === d.id
-                            ? "bg-white border-blue-500 text-blue-600 shadow-sm"
-                            : "bg-transparent border-transparent text-gray-500 hover:bg-gray-100"
-                            }`}
-                          style={{ fontFamily: d.font }}
-                        >
-                          {d.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Color Selector */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-gray-500">文字色</span>
-                    <div className="flex gap-2 flex-wrap">
-                      {[
-                        { c: "#ffffff", s: "rgba(0,0,0,0.8)" },  // White
-                        { c: "#000000", s: "rgba(255,255,255,0.8)" }, // Black
-                        { c: "#ff007f", s: "rgba(255,255,255,0.9)" }, // Pink
-                        { c: "#ff4500", s: "rgba(255,255,255,0.9)" }, // Orange
-                        { c: "#ffff00", s: "rgba(0,0,0,0.8)" }, // Yellow
-                        { c: "#32cd32", s: "rgba(0,0,0,0.8)" }, // Lime Green
-                        { c: "#00ffff", s: "rgba(0,0,0,0.8)" }, // Cyan
-                        { c: "#1e90ff", s: "rgba(255,255,255,0.8)" }, // Blue
-                        { c: "#9400d3", s: "rgba(255,255,255,0.9)" }, // Purple
-                      ].map((style) => (
-                        <button
-                          key={style.c}
-                          onClick={() => { setTextColor(style.c); setTextShadow(style.s); }}
-                          className={`w-6 h-6 rounded-full border border-gray-300 shadow-sm transition-transform ${textColor === style.c ? "ring-2 ring-blue-500 scale-110" : "hover:scale-110"}`}
-                          style={{ backgroundColor: style.c }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Sliders Row */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>位置</span>
-                        <span>{verticalPos}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="10"
-                        max="90"
-                        value={verticalPos}
-                        onChange={(e) => setVerticalPos(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>サイズ</span>
-                        <span>x{fontSizeScale}</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="2.0"
-                        step="0.1"
-                        value={fontSizeScale}
-                        onChange={(e) => setFontSizeScale(Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
+              {/* Action Buttons */}
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={handleDownloadProcessed}
@@ -723,68 +800,6 @@ export default function Home() {
           )}
         </section>
 
-        {/* Text Input Section */}
-        {/* Text Input Section */}
-        <section className="bg-white rounded-2xl shadow-sm p-5 space-y-5 border border-gray-100">
-          <h2 className="font-bold text-gray-800 flex items-center gap-2 text-lg">
-            <Settings className="w-5 h-5 text-purple-500" />
-            投稿設定
-          </h2>
-
-          <div className="space-y-5">
-            <div>
-              <label className="block text-base font-bold text-gray-800 mb-2">投稿テーマ</label>
-              <input
-                type="text"
-                placeholder="例：週末のカフェ巡り"
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-base placeholder-gray-400 font-medium"
-                value={formData.theme}
-                onChange={(e) => setFormData({ ...formData, theme: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-base font-bold text-gray-800 mb-2">ターゲット</label>
-              <input
-                type="text"
-                placeholder="例：20代の社会人"
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-base placeholder-gray-400 font-medium"
-                value={formData.target}
-                onChange={(e) => setFormData({ ...formData, target: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-base font-bold text-gray-800 mb-2">目的</label>
-              <input
-                type="text"
-                placeholder="例：いいねが欲しい"
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-base placeholder-gray-400 font-medium"
-                value={formData.goal}
-                onChange={(e) => setFormData({ ...formData, goal: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-base font-bold text-gray-800 mb-3">雰囲気</label>
-              <div className="flex flex-wrap gap-2">
-                {atmospheres.map((atm) => (
-                  <button
-                    key={atm}
-                    onClick={() => setFormData({ ...formData, atmosphere: atm })}
-                    className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${formData.atmosphere === atm
-                      ? "bg-purple-600 text-white shadow-md transform scale-105"
-                      : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
-                      }`}
-                  >
-                    {atm}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section >
-
         <button
           onClick={handleSubmit}
           disabled={loading}
@@ -804,31 +819,29 @@ export default function Home() {
         </button>
 
         {/* Result Section */}
-        {
-          result && (
-            <section className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <h2 className="font-bold text-gray-800 ml-1 text-lg">生成結果</h2>
-              <div className="bg-white rounded-2xl shadow-sm p-1 border border-gray-200 relative">
-                <textarea
-                  value={result}
-                  onChange={(e) => setResult(e.target.value)}
-                  className="w-full h-80 p-5 rounded-xl border-none resize-none focus:ring-0 text-base leading-relaxed text-gray-900 bg-transparent"
-                />
-              </div>
+        {result && (
+          <section className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 className="font-bold text-gray-800 ml-1 text-lg">生成結果</h2>
+            <div className="bg-white rounded-2xl shadow-sm p-1 border border-gray-200 relative">
+              <textarea
+                value={result}
+                onChange={(e) => setResult(e.target.value)}
+                className="w-full h-80 p-5 rounded-xl border-none resize-none focus:ring-0 text-base leading-relaxed text-gray-900 bg-transparent"
+              />
+            </div>
 
-              <button
-                onClick={handleCopyAndOpen}
-                className="w-full bg-white border-2 border-gray-200 text-gray-800 font-bold py-4 rounded-xl shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-base"
-              >
-                <Copy className="w-5 h-5 text-gray-600" />
-                <span>コピーして</span>
-                <Instagram className="w-5 h-5 text-pink-600" />
-                <span>を開く</span>
-              </button>
-            </section>
-          )
-        }
-      </div >
-    </main >
+            <button
+              onClick={handleCopyAndOpen}
+              className="w-full bg-white border-2 border-gray-200 text-gray-800 font-bold py-4 rounded-xl shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-base"
+            >
+              <Copy className="w-5 h-5 text-gray-600" />
+              <span>コピーして</span>
+              <Instagram className="w-5 h-5 text-pink-600" />
+              <span>を開く</span>
+            </button>
+          </section>
+        )}
+      </div>
+    </main>
   );
 }
