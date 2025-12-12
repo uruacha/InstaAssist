@@ -60,7 +60,7 @@ export default function Home() {
       if (!customApiKey) throw new Error("APIキーが入力されていません");
 
       const genAI = new GoogleGenerativeAI(customApiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
       // Minimal generation test
       await model.generateContent("Test");
@@ -111,13 +111,14 @@ export default function Home() {
       setImage(null);
       setResult("");
 
-      const isVideo = file.type.startsWith('video/');
+      // Robust video detection (file.type can be empty on Windows)
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv)$/i.test(file.name);
       setMediaType(isVideo ? 'video' : 'image');
 
       if (isVideo) {
         // Video specific handling
-        if (file.size > 20 * 1024 * 1024) {
-          setError("動画サイズは20MB以下にしてください");
+        if (file.size > 10 * 1024 * 1024) {
+          setError("動画サイズは10MB以下にしてください（AI処理の制限のため）");
           return;
         }
 
@@ -159,6 +160,10 @@ export default function Home() {
               const compressed = canvas.toDataURL("image/jpeg", 0.7);
               setImage(compressed);
             }
+          };
+          img.onerror = () => {
+            console.error("Image load failed");
+            setError("ファイルの読み込みに失敗しました。対応していない形式の可能性があります。");
           };
         };
         reader.readAsDataURL(file);
@@ -324,7 +329,7 @@ export default function Home() {
     if (!customApiKey) throw new Error("APIキーが設定されていません。右上の設定ボタンからキーを入力してください。");
 
     const genAI = new GoogleGenerativeAI(customApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     if (mediaBase64) {
       const imagePart = {
