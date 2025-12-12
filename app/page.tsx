@@ -10,7 +10,8 @@ export default function Home() {
     goal: "",
     atmosphere: "親近感",
   });
-  const [image, setImage] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<"image" | "video">("image");
+  const [image, setImage] = useState<string | null>(null); // Acts as media source (image or video)
   const [filter, setFilter] = useState("none");
   const [overlayText, setOverlayText] = useState("");
   const [isAutoTextMode, setIsAutoTextMode] = useState(false);
@@ -106,39 +107,62 @@ export default function Home() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const rawResult = reader.result as string;
-        // Resize logic
-        const img = new Image();
-        img.src = rawResult;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
-          const maxDim = 1000;
-          let width = img.width;
-          let height = img.height;
+      // Reset states
+      setImage(null);
+      setResult("");
 
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height *= maxDim / width;
-              width = maxDim;
-            } else {
-              width *= maxDim / height;
-              height = maxDim;
-            }
-          }
+      const isVideo = file.type.startsWith('video/');
+      setMediaType(isVideo ? 'video' : 'image');
 
-          canvas.width = width;
-          canvas.height = height;
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressed = canvas.toDataURL("image/jpeg", 0.7);
-            setImage(compressed);
-          }
+      if (isVideo) {
+        // Video specific handling
+        if (file.size > 20 * 1024 * 1024) {
+          setError("動画サイズは20MB以下にしてください");
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          setImage(result);
         };
-      };
-      reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+      } else {
+        // Existing Image handling
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const rawResult = reader.result as string;
+          // Resize logic
+          const img = new Image();
+          img.src = rawResult;
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            const maxDim = 1000;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height *= maxDim / width;
+                width = maxDim;
+              } else {
+                width *= maxDim / height;
+                height = maxDim;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressed = canvas.toDataURL("image/jpeg", 0.7);
+              setImage(compressed);
+            }
+          };
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -248,8 +272,8 @@ export default function Home() {
             ターゲット: ${target}
             雰囲気: ${atmosphere}
 
-            【添付画像について】
-            ${image ? "添付画像の要素（色、被写体、雰囲気）を強く意識したフレーズにしてください。" : "テーマに沿ったフレーズにしてください。"}
+            【添付画像・動画について】
+            ${image ? "添付されたメディアの要素（色、被写体、雰囲気、動きなど）を強く意識したフレーズにしてください。" : "テーマに沿ったフレーズにしてください。"}
 
             【指示】
             1. 15文字以内で出力してください。
@@ -271,9 +295,9 @@ export default function Home() {
 
       if (image) {
         systemPrompt += `
-        【添付画像について】
-        ユーザーが投稿に使用したい画像を添付しました。
-        画像の内容を分析し、その内容（写っているもの、色、雰囲気など）に触れるようなキャプションにしてください。
+        【添付メディアについて】
+        ユーザーが投稿に使用したい画像または動画を添付しました。
+        メディアの内容を分析し、その内容（写っているもの、色、雰囲気、動画なら動きやストーリーなど）に触れるようなキャプションにしてください。
         `;
       }
 
@@ -296,17 +320,17 @@ export default function Home() {
     }
   };
 
-  const callGemini = async (prompt: string, imageBase64: string | null) => {
+  const callGemini = async (prompt: string, mediaBase64: string | null) => {
     if (!customApiKey) throw new Error("APIキーが設定されていません。右上の設定ボタンからキーを入力してください。");
 
     const genAI = new GoogleGenerativeAI(customApiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    if (imageBase64) {
+    if (mediaBase64) {
       const imagePart = {
         inlineData: {
-          data: imageBase64.split(",")[1],
-          mimeType: "image/jpeg",
+          data: mediaBase64.split(",")[1],
+          mimeType: mediaBase64.split(";")[0].split(":")[1],
         },
       };
       const result = await model.generateContent([prompt, imagePart]);
@@ -340,7 +364,7 @@ export default function Home() {
 
   const handleGenerateCatchphrase = async () => {
     if (!formData.theme && !image) {
-      setError("AI生成には投稿テーマまたは画像が必要です");
+      setError("AI生成には投稿テーマまたはメディアが必要です");
       return;
     }
     setGeneratingText(true);
@@ -541,16 +565,16 @@ export default function Home() {
         <section className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-4">
           <h2 className="font-bold text-gray-800 flex items-center gap-2 text-lg">
             <ImageIcon className="w-5 h-5 text-blue-500" />
-            画像加工
+            メディアアップロード
           </h2>
 
           {!image ? (
             <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
               <div className="flex flex-col items-center justify-center pt-5 pb-6">
                 <Upload className="w-8 h-8 mb-2 text-gray-400" />
-                <p className="text-sm text-gray-500 font-medium">画像をタップして選択</p>
+                <p className="text-sm text-gray-500 font-medium">画像・動画をタップして選択</p>
               </div>
-              <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+              <input type="file" className="hidden" accept="image/*,video/*" onChange={handleImageUpload} />
             </label>
           ) : (
             <div className="space-y-4">
@@ -560,12 +584,20 @@ export default function Home() {
 
                 {/* Preview Container */}
                 <div className="relative">
-                  <img
-                    src={image}
-                    alt="Preview"
-                    className="w-full h-auto object-contain bg-gray-100"
-                    style={{ filter: filter }}
-                  />
+                  {mediaType === 'video' ? (
+                    <video
+                      src={image}
+                      controls
+                      className="w-full h-auto rounded-xl bg-black"
+                    />
+                  ) : (
+                    <img
+                      src={image}
+                      alt="Preview"
+                      className="w-full h-auto object-contain bg-gray-100"
+                      style={{ filter: filter }}
+                    />
+                  )}
                   {/* Text Overlay Preview (CSS) */}
                   {overlayText && (
                     <div
@@ -605,8 +637,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* MOVED: Text Style Controls (Sliders, Colors, etc.) */}
-              {overlayText && (
+
+              {/* MOVED: Text Style Controls (Sliders, Colors, etc.) - Only for Images */}
+              {mediaType === 'image' && overlayText && (
                 <div className="pt-2 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100 animate-in slide-in-from-top-2">
 
                   {/* Design Selector */}
@@ -716,29 +749,33 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Filter Controls (Moved below Style Controls) */}
-              <div className="space-y-2">
-                <p className="text-sm font-bold text-gray-700">雰囲気加工フィルター</p>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                  {filters.map((f) => (
-                    <button
-                      key={f.value}
-                      onClick={() => setFilter(f.value)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${filter === f.value
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                        }`}
-                    >
-                      {f.name}
-                    </button>
-                  ))}
+              {/* Filter Controls (Moved below Style Controls) - Only for Images */}
+              {mediaType === 'image' && (
+                <div className="space-y-2">
+                  <p className="text-sm font-bold text-gray-700">雰囲気加工フィルター</p>
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {filters.map((f) => (
+                      <button
+                        key={f.value}
+                        onClick={() => setFilter(f.value)}
+                        className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${filter === f.value
+                          ? "bg-blue-600 text-white shadow-md"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                      >
+                        {f.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Text Input / AI Control */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">文字入れ</label>
+                  <label className="text-sm font-medium text-gray-700">
+                    {mediaType === 'video' ? 'キャプション生成' : '文字入れ'}
+                  </label>
                   <button
                     onClick={() => setIsAutoTextMode(!isAutoTextMode)}
                     className={`text-xs px-3 py-1 rounded-full transition-colors font-bold ${isAutoTextMode
@@ -773,7 +810,13 @@ export default function Home() {
                 <textarea
                   value={overlayText}
                   onChange={(e) => setOverlayText(e.target.value)}
-                  placeholder={isAutoTextMode ? "AIが生成したテキストがここに入ります（編集可能）" : "画像に入れる文字を入力 (改行可)"}
+                  placeholder={
+                    isAutoTextMode
+                      ? "AIが生成したテキストがここに入ります（編集可能）"
+                      : mediaType === 'video'
+                        ? "動画の説明メモ（AI生成のヒントになります）"
+                        : "画像に入れる文字を入力 (改行可)"
+                  }
                   className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow resize-none ${isAutoTextMode ? "border-purple-200 bg-purple-50/30" : "border-gray-300"}`}
                   rows={2}
                 />
@@ -786,7 +829,7 @@ export default function Home() {
                   className="flex-1 py-3 bg-gray-800 text-white rounded-xl font-bold hover:bg-gray-900 transition-colors flex items-center justify-center gap-2 shadow-sm"
                 >
                   <Download className="w-5 h-5" />
-                  保存
+                  {mediaType === 'video' ? '完了' : '保存'}
                 </button>
 
                 <button
@@ -819,29 +862,31 @@ export default function Home() {
         </button>
 
         {/* Result Section */}
-        {result && (
-          <section className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="font-bold text-gray-800 ml-1 text-lg">生成結果</h2>
-            <div className="bg-white rounded-2xl shadow-sm p-1 border border-gray-200 relative">
-              <textarea
-                value={result}
-                onChange={(e) => setResult(e.target.value)}
-                className="w-full h-80 p-5 rounded-xl border-none resize-none focus:ring-0 text-base leading-relaxed text-gray-900 bg-transparent"
-              />
-            </div>
+        {
+          result && (
+            <section className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <h2 className="font-bold text-gray-800 ml-1 text-lg">生成結果</h2>
+              <div className="bg-white rounded-2xl shadow-sm p-1 border border-gray-200 relative">
+                <textarea
+                  value={result}
+                  onChange={(e) => setResult(e.target.value)}
+                  className="w-full h-80 p-5 rounded-xl border-none resize-none focus:ring-0 text-base leading-relaxed text-gray-900 bg-transparent"
+                />
+              </div>
 
-            <button
-              onClick={handleCopyAndOpen}
-              className="w-full bg-white border-2 border-gray-200 text-gray-800 font-bold py-4 rounded-xl shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-base"
-            >
-              <Copy className="w-5 h-5 text-gray-600" />
-              <span>コピーして</span>
-              <Instagram className="w-5 h-5 text-pink-600" />
-              <span>を開く</span>
-            </button>
-          </section>
-        )}
-      </div>
-    </main>
+              <button
+                onClick={handleCopyAndOpen}
+                className="w-full bg-white border-2 border-gray-200 text-gray-800 font-bold py-4 rounded-xl shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-base"
+              >
+                <Copy className="w-5 h-5 text-gray-600" />
+                <span>コピーして</span>
+                <Instagram className="w-5 h-5 text-pink-600" />
+                <span>を開く</span>
+              </button>
+            </section>
+          )
+        }
+      </div >
+    </main >
   );
 }
