@@ -4,6 +4,9 @@ import { Upload, Download, Sparkles, Copy, RefreshCw, Loader2, Image as ImageIco
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const MODELS = [
+  "gemini-2.0-flash-lite-preview-02-05", // Most specific typically works best
+  "gemini-2.0-flash-lite",
+  "gemini-flash-lite-latest",
   "gemini-2.5-flash",
   "gemini-2.5-pro",
   "gemini-2.0-flash",
