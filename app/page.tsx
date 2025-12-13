@@ -47,6 +47,7 @@ export default function Home() {
   const [testStatus, setTestStatus] = useState<"none" | "success" | "error">("none");
   const [testMessage, setTestMessage] = useState("");
   const [testing, setTesting] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("auto"); // "auto" or specific model name
 
   // Text Styling State
   const [textColor, setTextColor] = useState("#ffffff");
@@ -65,6 +66,8 @@ export default function Home() {
   useEffect(() => {
     const savedKey = localStorage.getItem("custom_gemini_api_key");
     if (savedKey) setCustomApiKey(savedKey);
+    const savedModel = localStorage.getItem("custom_gemini_model");
+    if (savedModel) setSelectedModel(savedModel);
   }, []);
 
   const saveCustomApiKey = (key: string) => {
@@ -72,6 +75,12 @@ export default function Home() {
     const cleanKey = key.replace(/["'\s\n]/g, "");
     setCustomApiKey(cleanKey);
     localStorage.setItem("custom_gemini_api_key", cleanKey);
+    localStorage.setItem("custom_gemini_model", selectedModel);
+  };
+
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
+    localStorage.setItem("custom_gemini_model", model);
   };
 
   const testApiKey = async () => {
@@ -368,7 +377,9 @@ export default function Home() {
     operation: (modelName: string) => Promise<T>
   ): Promise<T> => {
     let errors: string[] = [];
-    for (const modelName of MODELS) {
+    const candidateModels = selectedModel && selectedModel !== 'auto' ? [selectedModel] : MODELS;
+
+    for (const modelName of candidateModels) {
       try {
         console.log(`Trying model: ${modelName}`);
         const result = await operation(modelName);
@@ -379,7 +390,7 @@ export default function Home() {
         errors.push(`${modelName}: ${e.message}`);
       }
     }
-    throw new Error(`全モデル試行失敗。APIキーの権限または有効性を確認してください。\n詳細:\n${errors.join('\n')}`);
+    throw new Error(`全モデル試行失敗\n(選択中のモデル: ${selectedModel === 'auto' ? '自動' : selectedModel})\n\n詳細:\n${errors.join('\n')}`);
   };
 
   const callGemini = async (prompt: string, mediaBase64: string | null) => {
