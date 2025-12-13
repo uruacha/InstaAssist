@@ -4,11 +4,16 @@ import { Upload, Download, Sparkles, Copy, RefreshCw, Loader2, Image as ImageIco
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const MODELS = [
-  "gemini-1.5-flash-latest",
   "gemini-1.5-flash",
+  "gemini-1.5-flash-latest",
   "gemini-1.5-flash-001",
+  "gemini-1.5-flash-002",
   "gemini-1.5-pro",
-  "gemini-1.5-pro-latest"
+  "gemini-1.5-pro-latest",
+  "gemini-1.5-pro-001",
+  "gemini-1.5-pro-002",
+  "gemini-pro",
+  "gemini-pro-vision"
 ];
 
 export default function Home() {
@@ -71,7 +76,7 @@ export default function Home() {
         const genAI = new GoogleGenerativeAI(customApiKey);
         const model = genAI.getGenerativeModel({ model: modelName });
         await model.generateContent("Test");
-        return "success";
+        return modelName;
       });
 
       setTestStatus("success");
@@ -80,7 +85,23 @@ export default function Home() {
       const error = e as Error;
       console.error("Test Error:", error);
       setTestStatus("error");
-      setTestMessage(`エラー: ${error.message || "無効なキーです"}`);
+
+      // Advanced Diagnostics: Try to fetch available models
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${customApiKey}`);
+        const data = await response.json();
+
+        if (data.error) {
+          setTestMessage(`エラー: ${error.message}\n\n【API診断】\nAPI自体がエラーを返しています: ${data.error.message}\n(APIが無効、またはキーの問題の可能性があります)`);
+        } else if (data.models) {
+          const availableModels = data.models.map((m: any) => m.name.replace('models/', '')).join(', ');
+          setTestMessage(`エラー: 指定したモデルが見つかりませんでしたが、以下のモデルは利用可能です:\n${availableModels}\n\n(元のエラー: ${error.message})`);
+        } else {
+          setTestMessage(`エラー: ${error.message}\n\n【API診断】\nモデルリストを取得できませんでした。`);
+        }
+      } catch (fetchError: any) {
+        setTestMessage(`エラー: ${error.message}\n\n【API診断】\n診断通信にも失敗しました: ${fetchError.message}`);
+      }
     } finally {
       setTesting(false);
     }
@@ -338,20 +359,19 @@ export default function Home() {
     apiKey: string,
     operation: (modelName: string) => Promise<T>
   ): Promise<T> => {
-    let lastError: any = null;
+    let errors: string[] = [];
     for (const modelName of MODELS) {
       try {
         console.log(`Trying model: ${modelName}`);
         const result = await operation(modelName);
         console.log(`Success with model: ${modelName}`);
-        return result; // Return immediately on success (result might be just model name in test case, or text content)
+        return result;
       } catch (e: any) {
         console.warn(`Failed with model ${modelName}:`, e.message);
-        lastError = e;
-        // Continue to next model
+        errors.push(`${modelName}: ${e.message}`);
       }
     }
-    throw new Error(`全てのモデルでエラーが発生しました。最後の試行エラー: ${lastError?.message}`);
+    throw new Error(`全モデル試行失敗。APIキーの権限または有効性を確認してください。\n詳細:\n${errors.join('\n')}`);
   };
 
   const callGemini = async (prompt: string, mediaBase64: string | null) => {
