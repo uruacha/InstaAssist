@@ -534,6 +534,21 @@ export default function Home() {
             </button>
           </div>
 
+          <div className="mb-4">
+            <label className="block text-sm font-bold text-gray-700 mb-1">AIモデル選択</label>
+            <select
+              value={selectedModel}
+              onChange={(e) => handleModelChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+            >
+              <option value="auto">自動 (推奨)</option>
+              {MODELS.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-gray-500 mt-1">※自動でエラーが出る場合は、リストから直接モデルを選択して試してください（例: gemini-2.0-flash-liteなど）</p>
+          </div>
+
           {testStatus !== "none" && (
             <div className={`text-xs p-2 rounded mb-4 break-all max-h-24 overflow-y-auto ${testStatus === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
               {testMessage}
