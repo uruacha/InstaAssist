@@ -3,6 +3,14 @@ import { useState, useEffect, useRef } from "react";
 import { Upload, Download, Sparkles, Copy, RefreshCw, Loader2, Image as ImageIcon, Settings, Instagram, Eye, EyeOff } from "lucide-react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+const MODELS = [
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-001",
+  "gemini-1.5-pro",
+  "gemini-1.5-pro-latest"
+];
+
 export default function Home() {
   const [formData, setFormData] = useState({
     theme: "",
@@ -59,14 +67,15 @@ export default function Home() {
     try {
       if (!customApiKey) throw new Error("APIキーが入力されていません");
 
-      const genAI = new GoogleGenerativeAI(customApiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-      // Minimal generation test
-      await model.generateContent("Test");
+      const successModel = await callGeminiWithFallback(customApiKey, async (modelName) => {
+        const genAI = new GoogleGenerativeAI(customApiKey);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        await model.generateContent("Test");
+        return "success";
+      });
 
       setTestStatus("success");
-      setTestMessage("接続成功！このキーは有効です✅");
+      setTestMessage(`接続成功！ (${successModel})`);
     } catch (e: unknown) {
       const error = e as Error;
       console.error("Test Error:", error);
@@ -325,25 +334,47 @@ export default function Home() {
     }
   };
 
+  const callGeminiWithFallback = async <T,>(
+    apiKey: string,
+    operation: (modelName: string) => Promise<T>
+  ): Promise<T> => {
+    let lastError: any = null;
+    for (const modelName of MODELS) {
+      try {
+        console.log(`Trying model: ${modelName}`);
+        const result = await operation(modelName);
+        console.log(`Success with model: ${modelName}`);
+        return result; // Return immediately on success (result might be just model name in test case, or text content)
+      } catch (e: any) {
+        console.warn(`Failed with model ${modelName}:`, e.message);
+        lastError = e;
+        // Continue to next model
+      }
+    }
+    throw new Error(`全てのモデルでエラーが発生しました。最後の試行エラー: ${lastError?.message}`);
+  };
+
   const callGemini = async (prompt: string, mediaBase64: string | null) => {
     if (!customApiKey) throw new Error("APIキーが設定されていません。右上の設定ボタンからキーを入力してください。");
 
-    const genAI = new GoogleGenerativeAI(customApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    return await callGeminiWithFallback(customApiKey, async (modelName) => {
+      const genAI = new GoogleGenerativeAI(customApiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
 
-    if (mediaBase64) {
-      const imagePart = {
-        inlineData: {
-          data: mediaBase64.split(",")[1],
-          mimeType: mediaBase64.split(";")[0].split(":")[1],
-        },
-      };
-      const result = await model.generateContent([prompt, imagePart]);
-      return result.response.text();
-    } else {
-      const result = await model.generateContent(prompt);
-      return result.response.text();
-    }
+      if (mediaBase64) {
+        const imagePart = {
+          inlineData: {
+            data: mediaBase64.split(",")[1],
+            mimeType: mediaBase64.split(";")[0].split(":")[1],
+          },
+        };
+        const result = await model.generateContent([prompt, imagePart]);
+        return result.response.text();
+      } else {
+        const result = await model.generateContent(prompt);
+        return result.response.text();
+      }
+    });
   };
 
   const handleSubmit = async () => {
