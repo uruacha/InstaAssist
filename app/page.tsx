@@ -50,6 +50,7 @@ export default function Home() {
   const [testMessage, setTestMessage] = useState("");
   const [testing, setTesting] = useState(false);
   const [selectedModel, setSelectedModel] = useState("auto"); // "auto" or specific model name
+  const [customModelInput, setCustomModelInput] = useState(""); // Manual override
 
   // Text Styling State
   const [textColor, setTextColor] = useState("#ffffff");
@@ -63,6 +64,7 @@ export default function Home() {
   const [result, setResult] = useState("");
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Load custom API key on mount
   useEffect(() => {
@@ -70,6 +72,8 @@ export default function Home() {
     if (savedKey) setCustomApiKey(savedKey);
     const savedModel = localStorage.getItem("custom_gemini_model");
     if (savedModel) setSelectedModel(savedModel);
+    const savedCustomInput = localStorage.getItem("custom_gemini_model_input");
+    if (savedCustomInput) setCustomModelInput(savedCustomInput);
   }, []);
 
   const saveCustomApiKey = (key: string) => {
@@ -78,11 +82,25 @@ export default function Home() {
     setCustomApiKey(cleanKey);
     localStorage.setItem("custom_gemini_api_key", cleanKey);
     localStorage.setItem("custom_gemini_model", selectedModel);
+    localStorage.setItem("custom_gemini_model_input", customModelInput);
   };
 
   const handleModelChange = (model: string) => {
     setSelectedModel(model);
     localStorage.setItem("custom_gemini_model", model);
+    if (model !== 'custom') {
+      setCustomModelInput("");
+      localStorage.setItem("custom_gemini_model_input", "");
+    }
+  };
+
+  const handleCustomModelInputChange = (val: string) => {
+    setCustomModelInput(val);
+    localStorage.setItem("custom_gemini_model_input", val);
+    if (val) {
+      setSelectedModel('custom');
+      localStorage.setItem("custom_gemini_model", 'custom');
+    }
   };
 
   const testApiKey = async () => {
@@ -225,6 +243,99 @@ export default function Home() {
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
+
+    // Function to draw text overlay on canvas
+    const drawTextOverlay = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+      if (overlayText) {
+        const baseFontSize = width * 0.08; // 8% of image width
+        const fontSize = baseFontSize * fontSizeScale;
+
+        // Font & Style map
+        let fontFam = "sans-serif";
+        let fontWeight = "bold";
+
+        if (textDesign === "mincho") fontFam = "serif";
+        else if (textDesign === "pop") fontFam = "sans-serif";
+        else if (textDesign === "impact") { fontFam = "Impact, sans-serif"; fontWeight = "900"; }
+
+        ctx.font = `${fontWeight} ${fontSize}px ${fontFam}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        const x = (width * horizontalPos) / 100;
+        const y = (height * verticalPos) / 100;
+
+        const lines = overlayText.split("\n");
+        const lineHeight = fontSize * 1.2;
+        const totalTextHeight = (lines.length * lineHeight);
+        const startY = y - (totalTextHeight / 2) + (lineHeight / 2);
+
+        lines.forEach((line, i) => {
+          const ly = startY + (i * lineHeight);
+
+          if (textDesign === "neon") {
+            // Neon Effect: Multiple shadows
+            ctx.shadowColor = textColor;
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = textColor;
+            ctx.fillText(line, x, ly);
+
+            // Reinforce white core
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText(line, x, ly);
+          }
+          else if (textDesign === "pop") {
+            // Pop Effect: Thick white stroke
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = fontSize * 0.15;
+            ctx.lineJoin = "round";
+            ctx.miterLimit = 2;
+            ctx.strokeText(line, x, ly);
+
+            ctx.fillStyle = textColor;
+            ctx.shadowColor = "rgba(0,0,0,0.2)";
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetX = 3;
+            ctx.shadowOffsetY = 3;
+            ctx.fillText(line, x, ly);
+          }
+          else {
+            // Standard / Mincho / Impact
+            ctx.fillStyle = textColor;
+            ctx.shadowColor = textShadow;
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+            ctx.fillText(line, x, ly);
+          }
+        });
+      }
+    };
+
+    // Handle Video
+    if (mediaType === 'video' && videoRef.current) {
+      const video = videoRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      if (ctx) {
+        // Draw current video frame
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Draw text overlay
+        drawTextOverlay(ctx, canvas.width, canvas.height);
+
+        // Download
+        const link = document.createElement("a");
+        link.download = "video-frame-with-text.jpg";
+        link.href = canvas.toDataURL("image/jpeg", 0.8);
+        link.click();
+      }
+      return;
+    }
+
+    // Handle Image (existing logic)
     const img = new Image();
     img.src = image;
     img.onload = () => {
@@ -238,72 +349,8 @@ export default function Home() {
         ctx.drawImage(img, 0, 0, img.width, img.height);
         ctx.filter = "none"; // Reset filter for text
 
-        // Draw Text Overlay
-        if (overlayText) {
-          const baseFontSize = img.width * 0.08; // 8% of image width
-          const fontSize = baseFontSize * fontSizeScale;
-
-          // Font & Style map
-          let fontFam = "sans-serif";
-          let fontWeight = "bold";
-
-          if (textDesign === "mincho") fontFam = "serif";
-          else if (textDesign === "pop") fontFam = "sans-serif";
-          else if (textDesign === "impact") { fontFam = "Impact, sans-serif"; fontWeight = "900"; }
-
-          ctx.font = `${fontWeight} ${fontSize}px ${fontFam}`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-
-          const x = (img.width * horizontalPos) / 100;
-          const y = (img.height * verticalPos) / 100;
-
-          const lines = overlayText.split("\n");
-          const lineHeight = fontSize * 1.2;
-          const totalTextHeight = (lines.length * lineHeight);
-          const startY = y - (totalTextHeight / 2) + (lineHeight / 2);
-
-          lines.forEach((line, i) => {
-            const ly = startY + (i * lineHeight);
-
-            if (textDesign === "neon") {
-              // Neon Effect: Multiple shadows
-              ctx.shadowColor = textColor;
-              ctx.shadowBlur = 15;
-              ctx.fillStyle = textColor;
-              ctx.fillText(line, x, ly);
-
-              // Reinforce white core
-              ctx.shadowBlur = 0;
-              ctx.fillStyle = "#ffffff";
-              ctx.fillText(line, x, ly);
-            }
-            else if (textDesign === "pop") {
-              // Pop Effect: Thick white stroke
-              ctx.strokeStyle = "white";
-              ctx.lineWidth = fontSize * 0.15;
-              ctx.lineJoin = "round";
-              ctx.miterLimit = 2;
-              ctx.strokeText(line, x, ly);
-
-              ctx.fillStyle = textColor;
-              ctx.shadowColor = "rgba(0,0,0,0.2)";
-              ctx.shadowBlur = 5;
-              ctx.shadowOffsetX = 3;
-              ctx.shadowOffsetY = 3;
-              ctx.fillText(line, x, ly);
-            }
-            else {
-              // Standard / Mincho / Impact
-              ctx.fillStyle = textColor;
-              ctx.shadowColor = textShadow;
-              ctx.shadowBlur = 10;
-              ctx.shadowOffsetX = 2;
-              ctx.shadowOffsetY = 2;
-              ctx.fillText(line, x, ly);
-            }
-          });
-        }
+        // Draw text overlay
+        drawTextOverlay(ctx, img.width, img.height);
 
         // Download
         const link = document.createElement("a");
@@ -379,12 +426,19 @@ export default function Home() {
     operation: (modelName: string) => Promise<T>
   ): Promise<T> => {
     let errors: string[] = [];
-    const candidateModels = selectedModel && selectedModel !== 'auto' ? [selectedModel] : MODELS;
+    let candidateModels = MODELS;
+
+    if (selectedModel === 'custom' && customModelInput) {
+      candidateModels = [customModelInput];
+    } else if (selectedModel && selectedModel !== 'auto') {
+      candidateModels = [selectedModel];
+    }
 
     for (const modelName of candidateModels) {
       try {
         console.log(`Trying model: ${modelName}`);
         const result = await operation(modelName);
+        // ... (rest of logic)
         console.log(`Success with model: ${modelName}`);
         return result;
       } catch (e: any) {
@@ -548,6 +602,18 @@ export default function Home() {
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
+
+            <div className="mt-2">
+              <input
+                type="text"
+                placeholder="モデル名を手入力 (例: gemini-1.5-flash-8b)"
+                value={customModelInput}
+                onChange={(e) => handleCustomModelInputChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white placeholder-gray-400"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">※手入力すると、上の選択に関わらず優先されます。</p>
+            </div>
+
             <p className="text-[10px] text-gray-500 mt-1">※自動でエラーが出る場合は、リストから直接モデルを選択して試してください（例: gemini-2.0-flash-liteなど）</p>
           </div>
 
@@ -678,6 +744,7 @@ export default function Home() {
                 <div className="relative">
                   {mediaType === 'video' ? (
                     <video
+                      ref={videoRef}
                       src={image}
                       controls
                       className="w-full h-auto rounded-xl bg-black"
@@ -690,6 +757,20 @@ export default function Home() {
                       style={{ filter: filter }}
                     />
                   )}
+
+                  {/* Media Reset Button */}
+                  <button
+                    onClick={() => {
+                      setImage(null);
+                      setResult("");
+                      setMediaType("image");
+                    }}
+                    className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm shadow-md z-10"
+                    title="メディアを削除して再選択"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+
                   {/* Text Overlay Preview (CSS) */}
                   {overlayText && (
                     <div
@@ -730,8 +811,8 @@ export default function Home() {
               </div>
 
 
-              {/* MOVED: Text Style Controls (Sliders, Colors, etc.) - Only for Images */}
-              {mediaType === 'image' && overlayText && (
+              {/* Text Style Controls (Sliders, Colors, etc.) */}
+              {overlayText && (
                 <div className="pt-2 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100 animate-in slide-in-from-top-2">
 
                   {/* Design Selector */}

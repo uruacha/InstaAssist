@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
+const isVercel = process.env.VERCEL === "1";
+
 const nextConfig: NextConfig = {
-  output: "export",
-  basePath: "/InstaAssist",
+  output: isVercel ? undefined : "export",
+  basePath: isVercel ? "" : "/InstaAssist",
   trailingSlash: true,
   images: {
     unoptimized: true,
